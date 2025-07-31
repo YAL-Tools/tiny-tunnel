@@ -1,0 +1,5 @@
+-D js-es=6
+-lib hxnodejs
+--class-path src
+-dce full
+-debug

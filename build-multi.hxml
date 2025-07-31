@@ -1,0 +1,5 @@
+shared.hxml
+--js bin/tiny-tunnel.js
+--main Multi
+--cmd start cmd /C run-relay.bat
+#--cmd start cmd /C run-multi.bat
