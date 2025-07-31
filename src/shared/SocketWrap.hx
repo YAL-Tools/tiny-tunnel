@@ -1,20 +1,13 @@
 package shared;
 
-import js.node.Net;
+import js.Node;
 import haxe.io.BytesOutput;
 import js.html.Console;
 import haxe.CallStack;
-import haxe.io.BytesInput;
 import js.node.net.Socket;
 using shared.BytesTools;
 
 abstract class SocketWrap<P:Int> {
-	public static function createServerOptions() {
-		var r:NetCreateServerOptions = {};
-		(cast r).highWaterMark = 1024 * 1024 * 64;
-		return r;
-	}
-	
 	public var debug = false;
 	public var sockFamily:SocketAdressFamily = null;
 	public var sockAddr:String = null;
@@ -54,7 +47,10 @@ abstract class SocketWrap<P:Int> {
 		}
 		//
 		try {
-			socket.destroy();
+			var skt = socket;
+			Node.setTimeout(() -> {
+				skt.destroy();
+			}, 100);
 		} catch (x:Dynamic) {
 			Console.warn('Destroy error:', x);
 		}

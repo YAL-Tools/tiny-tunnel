@@ -29,14 +29,14 @@ class Relay {
 			Console.error("--host-port and --guest-port are required!");
 			Sys.exit(1);
 		}
-		var hostListener = Net.createServer(SocketWrap.createServerOptions(), (skt) -> {
+		var hostListener = NetTools.createServer((skt) -> {
 			var wrap = new RelayHostSkt();
 			wrap.bind(skt);
 			Console.log("Host connected: " + wrap);
 		});
 		hostListener.listen(hostPort);
 		//
-		var guestListener = Net.createServer(SocketWrap.createServerOptions(), (skt) -> {
+		var guestListener = NetTools.createServer((skt) -> {
 			var wrap = new RelayGuestSkt();
 			wrap.bind(skt);
 			Console.log("Guest connected: " + wrap);

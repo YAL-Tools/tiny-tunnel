@@ -27,9 +27,13 @@ class GuestRelaySkt extends SocketWrap<PacketID> {
 				Console.log("Relay connection confirmed.");
 			};
 			case Data: {
-				var skt = Guest.socket;
-				if (skt == null) return;
-				var dataSize = size - 1;
+				var clientID = reader.readInt32();
+				var skt = Guest.clients.get(clientID);
+				if (skt == null) {
+					Console.warn('Got ${size - 5} bytes of data for nonexistent socket $clientID');
+					return;
+				}
+				var dataSize = size - 5;
 				var bytes = Bytes.alloc(dataSize);
 				reader.readBytes(bytes, 0, dataSize);
 				var arrayBuffer = bytes.getData();
@@ -37,15 +41,19 @@ class GuestRelaySkt extends SocketWrap<PacketID> {
 				skt.write(nativeBuffer);
 			};
 			case DisconnectedFromServerOnHost: {
-				var skt = Guest.socket;
-				if (skt == null) return;
-				Console.warn("Socket destroyed on host side");
+				var clientID = reader.readInt32();
+				var skt = Guest.clients.get(clientID);
+				if (skt == null) {
+					Console.warn('Asked to destroy nonexistent socket $clientID');
+					return;
+				}
+				Console.log('Socket ${clientID} was destroyed on host side.');
 				try {
 					skt.destroy();
 				} catch (x:Dynamic) {
 					//
 				}
-				Guest.socket = null;
+				Guest.clients.delete(clientID);
 			};
 			case Bye: handleKicker(reader);
 			default: {

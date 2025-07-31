@@ -1,16 +1,19 @@
 package guest;
 
+import shared.NetTools;
 import shared.SocketWrap;
 import js.node.Buffer;
 import js.node.Net;
 import js.html.Console;
 import shared.CliTools;
 import js.node.net.Socket;
+import js.lib.Map;
 using shared.BytesTools;
 
 class Guest {
 	public static var relay:GuestRelaySkt = null;
-	public static var socket:Socket = null;
+	public static var clients:Map<Int, Socket> = new Map();
+	static var nextClientID = 0;
 	public static var password:String = "";
 	public static function main_1(args:Array<String>) {
 		var relayIP:String = null;
@@ -49,13 +52,23 @@ class Guest {
 			Sys.exit(1);
 		});
 		//
-		var listener = Net.createServer(SocketWrap.createServerOptions(), (skt:Socket) -> {
-			Console.log('Local socket connected: (${skt.remoteFamily}, "${skt.remoteAddress}", ${skt.remotePort})');
-			if (socket != null) {
-				Console.warn("But we already have a socket! Re-binding");
+		var listener = NetTools.createServer((skt:Socket) -> {
+			var clientID = nextClientID++;
+			Console.log('Local socket connected: ' + NetTools.printRemoteAddress(skt) + ', id $clientID');
+			clients.set(clientID, skt);
+			{
+				var out = relay.start(CreateClient);
+				out.writeInt32(clientID);
+				relay.send(out);
+			};
+			inline function destroy() {
+				if (clients.has(clientID)) {
+					var out = relay.start(DestroyClient);
+					out.writeInt32(clientID);
+					relay.send(out);
+					clients.delete(clientID);
+				}
 			}
-			socket = skt;
-			relay.sendSimple(CreateClient);
 			skt.on("data", (data:Any) -> {
 				var buf:Buffer;
 				if (data is String) {
@@ -63,28 +76,23 @@ class Guest {
 				} else buf = data;
 				//
 				var bytes = buf.hxToBytes();
-				var b = relay.start(Data, bytes.length + 1);
+				var b = relay.start(Data, bytes.length + 4);
+				b.writeInt32(clientID);
 				b.writeBytes(bytes, 0, bytes.length);
 				relay.send(b);
 			});
 			skt.on("error", (e) -> {
-				Console.warn("Socket error:", e);
+				Console.warn('Error on socket $clientID:', e);
 				try {
 					skt.destroy();
 				} catch (x:Dynamic) {
 					Console.warn("Destroy error:", e);
 				}
-				if (socket == skt) {
-					relay.sendSimple(DestroyClient);
-					socket = null;
-				}
+				destroy();
 			});
 			skt.on("close", (e) -> {
-				Console.warn("Socket closed:", e);
-				if (socket == skt) {
-					relay.sendSimple(DestroyClient);
-					socket = null;
-				}
+				Console.warn('Socket $clientID closed:', e);
+				destroy();
 			});
 		});
 		listener.listen(serverPort);

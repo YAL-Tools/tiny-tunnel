@@ -28,21 +28,30 @@ class HostRelaySkt extends SocketWrap<PacketID> {
 				Console.log("Relay connection confirmed.");
 			};
 			case CreateClient: {
-				if (Host.socket != null) {
-					Console.warn("Asked to re-create a client..?");
-					Host.socket.destroy();
-				}
-				Host.socket = new HostSocket();
+				var clientID = reader.readInt32();
+				var skt = new HostSocket(clientID);
+				Console.log('Created socket $clientID ${skt.toString()}');
+				Host.clients.set(clientID, skt);
 			};
 			case DestroyClient: {
-				if (Host.socket != null) {
-					Host.socket.destroy();
+				var clientID = reader.readInt32();
+				var skt = Host.clients.get(clientID);
+				if (skt != null) {
+					Console.log('Destroyed socket $clientID ${skt.toString()}');
+					skt.destroy();
+					Host.clients.delete(clientID);
+				} else {
+					Console.warn('Asked to destroy nonexistent socket $clientID');
 				}
 			};
 			case Data: {
-				var skt = Host.socket;
-				if (skt == null) return;
-				var dataSize = size - 1;
+				var clientID = reader.readInt32();
+				var skt = Host.clients.get(clientID);
+				if (skt == null) {
+					Console.warn('Got ${size - 5} bytes of data for nonexistent socket $clientID');
+					return;
+				}
+				var dataSize = size - 5;
 				var bytes = Bytes.alloc(dataSize);
 				reader.readBytes(bytes, 0, dataSize);
 				skt.send(bytes);

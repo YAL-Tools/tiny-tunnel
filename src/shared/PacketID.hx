@@ -12,15 +12,15 @@ enum abstract PacketID(Int) from Int to Int {
 	/** R->HG **/
 	var HelloYes = 0x12;
 	
-	/** G->H **/
+	/** G->H (id:i32) **/
 	var CreateClient = 0x20;
-	/** G->H **/
+	/** G->H (id:i32) **/
 	var DestroyClient = 0x21;
 	
-	/** H->G **/
+	/** H->G (id:i32) **/
 	var DisconnectedFromServerOnHost = 0x22;
 	
-	/** H<->G **/
+	/** H<->G (id:i32) **/
 	var Data = 0x70;
 	
 	/** R->HG **/

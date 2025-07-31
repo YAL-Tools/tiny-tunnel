@@ -5,11 +5,12 @@ import js.node.Net;
 import js.html.Console;
 import shared.CliTools;
 import js.node.net.Socket;
+import js.lib.Map;
 using shared.BytesTools;
 
 class Host {
 	public static var relay:HostRelaySkt = null;
-	public static var socket:HostSocket = null;
+	public static var clients:Map<Int, HostSocket> = new Map();
 	public static var password:String = "";
 	public static var connectIP:String = "127.0.0.1";
 	public static var connectPort:Int = null;
