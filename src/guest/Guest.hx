@@ -96,6 +96,7 @@ class Guest {
 			});
 		});
 		listener.listen(serverPort);
+		Console.log('Listening on port $serverPort');
 	}
 	public static function main() {
 		main_1(Sys.args());

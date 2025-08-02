@@ -28,7 +28,7 @@ class Host {
 					return 1;
 				};
 				case "--connect-ip": {
-					relayIP = params[0];
+					connectIP = params[0];
 					return 1;
 				};
 				case "--connect-port": {
@@ -53,6 +53,7 @@ class Host {
 			Console.error("Relay connection error:", e);
 			Sys.exit(1);
 		});
+		Console.log('Will connect to $connectIP:$connectPort when asked.');
 	}
 	public static function main() {
 		main_1(Sys.args());

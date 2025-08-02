@@ -63,7 +63,7 @@ class HostRelaySkt extends SocketWrap<PacketID> {
 		}
 	}
 	override function send(buf:BytesOutput) {
-		PacketHelper.print(buf.getBytes());
-		super.send(buf);
+		//PacketHelper.print(buf.getBytes());
+		return super.send(buf);
 	}
 }

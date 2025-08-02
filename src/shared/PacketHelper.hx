@@ -58,7 +58,6 @@ class PacketHelper {
 	public static inline var headerSize = 6;
 	public static inline var header:Int = 'T'.code + ('L'.code << 8);
 	public static inline var continueFlag = (1 << 30);
-	public static var MTU = 32000;
 	
 	public static inline function read(data:EitherType<String, Buffer>, acc:PacketAcc, leftovers:PacketAcc, handler:BytesInputEx->Int->Void) {
 		var buf:Buffer;
@@ -68,7 +67,9 @@ class PacketHelper {
 		var pos = 0;
 		var len = buf.length;
 		var bytes = buf.hxToBytes();
+		trace("chunk", bytes.length);
 		var leftoverSize = leftovers.pos;
+		var origBytes = bytes;
 		if (leftoverSize > 0) {
 			bytes = leftovers.buf.concatExt(0, leftoverSize, bytes, 0, len);
 			len = bytes.length;
@@ -87,6 +88,7 @@ class PacketHelper {
 			var head = bytes.getUInt16(pos); pos += 2;
 			if (head != header) {
 				trace("leftoverSize", leftoverSize);
+				//trace("orig", print(origBytes));
 				trace("data", print(bytes));
 				throw "Unexpected header " + StringTools.hex(head, 4) + " at pos " + pos;
 			}
@@ -117,57 +119,5 @@ class PacketHelper {
 			}
 			pos += packetSize;
 		}
-	}
-	public static function start(kind:Int, expect:Int = 0) {
-		var buf = new BytesOutput();
-		buf.prepare(7 + expect);
-		buf.writeUInt16(header);
-		buf.writeInt32(0);
-		buf.writeByte(kind);
-		return buf;
-	}
-	public static function send(socket:Socket, buf:BytesOutput) {
-		var size = buf.length;
-		var bytes = buf.getBytes();
-		//trace(print(bytes, -1, size));
-		// small enough?
-		if (size <= MTU) try {
-			var size = buf.length;
-			bytes.setInt32(2, size - headerSize);
-			var arrayBuffer = bytes.getData();
-			var nativeBuffer = Buffer.from(arrayBuffer, 0, size);
-			socket.write(nativeBuffer);
-			return true;
-		} catch (x:Dynamic) {
-			return false;
-		}
-		//
-		static var tmp:Bytes = null;
-		if (tmp == null || tmp.length < MTU) {
-			tmp = Bytes.alloc(MTU);
-			tmp.setUInt16(0, header);
-		}
-		//
-		var offset = headerSize;
-		var left = size - offset;
-		var maxSubSize = MTU - headerSize;
-		do {
-			var subSize = left;
-			if (subSize > maxSubSize) subSize = maxSubSize;
-			tmp.setInt32(2, subSize | (subSize < left ? continueFlag : 0));
-			tmp.blit(headerSize, bytes, offset, subSize);
-			//Console.log('Frame pos=$offset size=$subSize total=$size left=$left');
-			offset += subSize;
-			left -= subSize;
-			//
-			var arrayBuffer = tmp.getData();
-			var nativeBuffer = Buffer.from(arrayBuffer, 0, subSize + headerSize);
-			try {
-				socket.write(nativeBuffer);
-			} catch (x:Dynamic) {
-				return false;
-			}
-		} while (left > 0);
-		return true;
 	}
 }

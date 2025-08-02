@@ -1,9 +1,11 @@
+import js.html.Console;
 import host.Host;
 import relay.Relay;
 import guest.Guest;
 
 class Multi {
 	public static function main() {
+		Console.log("Built at " + shared.BuildDate.get());
 		var args = Sys.args();
 		var mode = args.shift();
 		switch (mode) {
