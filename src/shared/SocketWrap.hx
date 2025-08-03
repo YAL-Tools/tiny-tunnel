@@ -1,5 +1,6 @@
 package shared;
 
+import haxe.io.BytesInput;
 import sys.io.File;
 import sys.FileSystem;
 import haxe.extern.EitherType;
@@ -39,7 +40,6 @@ abstract class SocketWrap<P:Int> {
 		var code:ErrorCode = reader.readUInt16();
 		var custom = code == Custom ? reader.readCString() : "";
 		Console.error('We got disconnected - ${code.getName()}/"$custom"');
-		dumpSendLog();
 		destroy();
 	}
 	public function destroy(?code:ErrorCode, ?reason:String) {
@@ -104,165 +104,52 @@ abstract class SocketWrap<P:Int> {
 	//
 	static inline var headerSize = 6;
 	static inline var header:Int = 'T'.code + ('L'.code << 8);
-	static inline var continueFlag = (1 << 30);
-	static var MTU = 32000;
 	//
-	var receivePairs = [];
-	var receiveLog = [];
-	function dumpReceiveLog() {
-		Console.error("Dumping... " + receiveLog.length + ", " + receivePairs.length);
-		DumpTools.ensureDirectory("dump");
-		var dir = "dump/" + Type.getClassName(Type.getClass(this));
-		if (FileSystem.exists(dir)) {
-			for (rel in FileSystem.readDirectory(dir)) {
-				var full = '$dir/$rel';
-				FileSystem.deleteFile(full);
-			}
-		} else FileSystem.createDirectory(dir);
-		var now = Date.now().toString();
-		now = ~/[^\w]+/g.replace(now, "-");
-		File.saveContent('$dir/__$now.txt', receiveLog.join("\r\n"));
-		for (i => q in receivePairs) {
-			inline function saveBuffer(b, name) {
-				File.saveBytes('$dir/$i-$name.bin', b);
-			}
-			inline function saveBufferIf(b, name) {
-				if (b != null) saveBuffer(b, name);
-			}
-			saveBuffer(q.bytes, 'bytes');
-			saveBufferIf(q.leftovers, 'leftovers');
-			saveBufferIf(q.combined, 'combined');
-			for (k => b in q.acc) saveBuffer(b, 'acc-$k');
-		}
-	}
-	function firstBytes(b:Bytes, ?n:Int, offset:Int = 0) {
-		n ??= b.length;
-		n -= offset;
-		if (n == 0) return "";
-		if (n > 4) n = 4;
-		//
-		var r = StringTools.hex(b.get(0), 2);
-		for (i in 1 ... n) {
-			r += " " + StringTools.hex(b.get(offset + i), 2);
-		}
-		return r;
-	}
+	private var leftovers:Bytes = null;
 	private function readData(data:EitherType<String, Buffer>) {
 		if (socket == null) return;
-		var buf:Buffer;
-		if (data is String) {
-			buf = Buffer.from((data:String));
-		} else buf = (data:Buffer);
+		var bytes = BytesTools.dataToBytes(data);
+		if (leftovers != null) {
+			bytes = leftovers.concat(bytes);
+			leftovers = null;
+		}
+		//
+		var len = bytes.length;
 		var pos = 0;
-		var len = buf.length;
-		var bytes = buf.hxToBytes();
-		var acc = packetAcc;
-		var leftovers = packetLeftovers;
-		var leftoverSize = leftovers.pos;
+		inline function stash() {
+			leftovers = bytes.sub(pos, len - pos);
+		}
 		//
-		var logIndex = receivePairs.length;
-		inline function log(text:String) {
-			Console.log(logIndex, text);
-			receiveLog.push('$logIndex\t$text');
-		}
-		log('$len bytes!');
-		var rcv = {
-			bytes: bytes.sub(0, len),
-			leftovers: leftoverSize > 0 ? leftovers.buf.sub(0, leftoverSize) : null,
-			combined: null,
-			acc: [],
-		};
-		receivePairs.push(rcv);
-		//
-		if (leftoverSize > 0) {
-			log('Have $leftoverSize bytes of leftovers! ' + firstBytes(leftovers.buf, leftoverSize));
-			bytes = leftovers.buf.concatExt(0, leftoverSize, bytes, 0, len);
-			len = bytes.length;
-			log('Combined size is $len!' + firstBytes(bytes, len));
-			rcv.combined = bytes.sub(0, len);
-			leftovers.clear();
-		}
-		inline function stashLeftovers() {
-			leftovers.set(bytes, pos, len - pos);
-			log('Stored leftovers ${leftovers.pos} ... $len!' + firstBytes(leftovers.buf, leftovers.pos));
-		}
-		//trace("data", print(bytes));
 		while (pos < len) {
 			if (pos + headerSize > len) {
-				stashLeftovers();
+				stash();
 				break;
 			}
 			//
-			var head = bytes.getUInt16(pos); pos += 2;
+			var head = bytes.getUInt16(pos);
 			if (head != header) {
-				//trace("leftoverSize", leftoverSize);
-				//trace("orig", print(origBytes));
-				//trace("data", PacketHelper.print(bytes));
-				log('Trouble at pos $pos');
-				dumpReceiveLog();
 				throw "Unexpected header " + StringTools.hex(head, 4) + " at pos " + pos;
 			}
-			var packetSize = bytes.getInt32(pos); pos += 4;
-			inline function theseBytes() return firstBytes(bytes, packetSize, pos);
-			
-			var isContinue = (packetSize & continueFlag) != 0;
-			if (isContinue) packetSize &= ~continueFlag;
-			
-			var end = pos + packetSize;
-			if (end > len) {
-				pos -= headerSize;
-				leftovers.set(bytes, pos, len - pos);
-				log('Packet spans $pos ... $end, but size is $len. Stashed '
-					+ firstBytes(leftovers.buf, len - pos)
-				);
+			//
+			var pktSize = bytes.getInt32(pos + 2);
+			var pktTill = pos + headerSize + pktSize;
+			if (pktTill > len) {
+				stash();
 				break;
 			}
-			//trace(packetSize, isContinue, acc.pos);
-			if (packetSize == 0 && !isContinue && acc.pos == 0) continue;
-			
-			if (!isContinue && acc.pos == 0) {
-				var p:PacketID = bytes.get(pos);
-				log('Packet: ${p.getName()} at $pos ... $end, ${theseBytes()}');
-				var reader = new BytesInputEx(bytes, pos, packetSize);
-				onPacket(reader, packetSize);
-			} else {
-				acc.add(bytes, pos, packetSize);
-				log('Added bytes $pos ... $end (${theseBytes()}) to acc, now at ${acc.pos}');
-				if (!isContinue) {
-					//trace(acc.buf.sub(0, acc.pos).toString());
-					var p:PacketID = acc.buf.get(0);
-					log('AccPacket: ${p.getName()} at 0 ... ${acc.pos}, '
-						+ firstBytes(acc.buf, acc.pos, 0)
-					);
-					var reader = acc.getInput();
-					rcv.acc.push(acc.buf.sub(0, acc.pos));
-					onPacket(reader, acc.pos);
-					acc.clear();
-				}
-			}
-			pos += packetSize;
-		}
-	}
-	//
-	var sent = [];
-	public function dumpSendLog() {
-		DumpTools.ensureDirectory("dump");
-		var dir = "dump/" + Type.getClassName(Type.getClass(this)) + "-send";
-		DumpTools.ensureEmptyDirectory(dir);
-		for (i => b in sent) {
-			File.saveBytes('$dir/$i.bin', b);
+			//
+			pos += headerSize;
+			var reader = new BytesInputEx(bytes, pos, pktSize);
+			onPacket(reader, pktSize);
+			pos += pktSize;
 		}
 	}
 	//
 	public function send(buf:BytesOutput) {
-		var size = buf.length;
-		var bytes = buf.getBytes();
-		//trace(print(bytes, -1, size));
-		// small enough?
-		if (size <= MTU) try {
+		try {
+			var bytes = buf.getBytes();
 			var size = buf.length;
 			bytes.setInt32(2, size - headerSize);
-			sent.push(bytes.sub(0, size));
 			var arrayBuffer = bytes.getData();
 			var nativeBuffer = Buffer.from(arrayBuffer, 0, size);
 			socket.write(nativeBuffer);
@@ -270,36 +157,6 @@ abstract class SocketWrap<P:Int> {
 		} catch (x:Dynamic) {
 			return false;
 		}
-		//
-		static var tmp:Bytes = null;
-		if (tmp == null || tmp.length < MTU) {
-			tmp = Bytes.alloc(MTU);
-			tmp.setUInt16(0, header);
-		}
-		//
-		var offset = headerSize;
-		var left = size - offset;
-		var maxSubSize = MTU - headerSize;
-		do {
-			var subSize = left;
-			if (subSize > maxSubSize) subSize = maxSubSize;
-			var isContinue = subSize < left;
-			tmp.setInt32(2, subSize | (isContinue ? continueFlag : 0));
-			tmp.blit(headerSize, bytes, offset, subSize);
-			Console.log('Frame pos=$offset size=$subSize total=$size left=$left cont=$isContinue');
-			offset += subSize;
-			left -= subSize;
-			//
-			var arrayBuffer = tmp.getData();
-			var nativeBuffer = Buffer.from(arrayBuffer, 0, subSize + headerSize);
-			sent.push(tmp.sub(0, subSize + headerSize));
-			try {
-				socket.write(nativeBuffer);
-			} catch (x:Dynamic) {
-				return false;
-			}
-		} while (left > 0);
-		return true;
 	}
 	//
 	public inline function start(kind:PacketID, expect:Int = 0) {

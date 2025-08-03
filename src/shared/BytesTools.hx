@@ -32,10 +32,7 @@ class BytesTools {
 		if (data is String) {
 			buf = Buffer.from((data:String));
 		} else buf = (data:Buffer);
-		var pos = 0;
-		var len = buf.length;
-		var bytes = buf.hxToBytes();
-		return bytes;
+		return buf.hxToBytes();
 	}
 	public static inline function writeBool(o:BytesOutput, bool:Bool) {
 		o.writeByte(bool ? 1 : 0);
@@ -45,6 +42,12 @@ class BytesTools {
 		var nb = Bytes.alloc(newSize);
 		nb.blit(0, b, 0, b.length);
 		return nb;
+	}
+	public static function concat(a:Bytes, b:Bytes) {
+		var r = Bytes.alloc(a.length + b.length);
+		r.blit(0, a, 0, a.length);
+		r.blit(a.length, b, 0, b.length);
+		return r;
 	}
 	public static function concatExt(a:Bytes, aPos:Int, aLen:Int, b:Bytes, bPos:Int, bLen:Int) {
 		var r = Bytes.alloc(aLen + bLen);

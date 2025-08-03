@@ -3,3 +3,6 @@
 /bin/*.bat
 /bin/dump
 run-*-do.bat
+/.stfolder/
+/.stignore
+/desktop.ini
