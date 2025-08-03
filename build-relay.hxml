@@ -1,4 +1,0 @@
-shared.hxml
---js bin/relay.js
---main relay/Relay.hx
---cmd node bin/relay.js --port 5395

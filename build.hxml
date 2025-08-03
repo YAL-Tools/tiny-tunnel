@@ -3,3 +3,6 @@
 --class-path src
 -dce full
 -debug
+
+--js bin/tiny-tunnel.js
+--main Multi
