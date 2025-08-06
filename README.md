@@ -6,7 +6,7 @@ even with hole-punching.
 
 ![](./flowchart.png)
 
-<details open>
+<details>
 <summary>Text form</summary>
 
 <table><tr><td>
@@ -102,3 +102,8 @@ to connect to the game server and data will be forwarded back and forth.
 
 When the guest's local client disconnects or the host destroys the client,
 the local client on the other side will be destroyed.
+
+## Limitations
+
+Only TCP protocol is supported.
+

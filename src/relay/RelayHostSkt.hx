@@ -47,18 +47,21 @@ class RelayHostSkt extends SocketWrap<PacketID> {
 			sendSimple(HelloYes);
 			return;
 		}
-		inline function forward() {
+		inline function forward(show = true) {
 			var guest = Relay.guest;
 			if (guest != null) {
+				if (show) Console.log("Host->Guest: " + pid.getName());
 				var n = size - 1;
 				var out = guest.start(pid, n);
 				out.writeBytesInput(reader, n);
 				guest.send(out);
+			} else {
+				if (show) Console.log("Host->Void: " + pid.getName());
 			}
 		}
 		if (debug) Console.info("Host:", pid.getName());
 		switch (pid) {
-			case Data: forward();
+			case Data: forward(false);
 			case DestroyClient: forward();
 			case DisconnectedFromServerOnHost: forward();
 			case Bye: handleKicker(reader);
